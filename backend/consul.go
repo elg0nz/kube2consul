@@ -41,6 +41,13 @@ func (cb *ConsulBackend) PutKV(key, value string) {
 		glog.Fatalln("Cannot add value in Consul:", err)
 	}
 }
+
+func (cb *ConsulBackend) GetKV(key string) (*consul.KVPair, error) {
+	kv := cb.client.KV()
+	value, _, err := kv.Get(key, nil)
+	return value, err
+}
+
 func (cb *ConsulBackend) DeleteKV(key string) {
 	kv := cb.client.KV()
 	_, err := kv.Delete(key, nil)
@@ -53,8 +60,6 @@ func (cb *ConsulBackend) ListKV(key string) consul.KVPairs {
 	kv := cb.client.KV()
 	if values, _, err := kv.List(key, nil); err == nil {
 		return values
-	} else {
-		glog.Fatalln("Cannot add value in Consul:", err)
 	}
 	return nil
 }

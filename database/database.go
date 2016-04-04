@@ -71,6 +71,7 @@ func (db *Database) WatchEvents() {
 		}
 	}()
 
+	// TODO: fix bug boucle infini !
 	for event := range events {
 		for _, subscriber := range db.subscribers {
 			subscriber.ch <- event

@@ -1,10 +1,6 @@
-package plugins
+package service
 
 import (
-	"encoding/json"
-	"fmt"
-	"strings"
-
 	"k8s.io/kubernetes/pkg/watch"
 
 	"github.com/golang/glog"
@@ -52,103 +48,120 @@ func (sp *ServicePlugin) Initialize(pm *plugins.PluginManager) {
 	}()
 }
 
-func (sp *ServicePlugin) handleEvent(event watch.Event) {
-	glog.Infof("New event: %v", event)
-}
-
 func (sp *ServicePlugin) Sync() {
 	exportedServices := make(ServiceList)
 
 	services := sp.pm.Db.ListServices()
 
 	for _, svc := range services.Items {
-		ips := make([]string, 0)
-		ports := make(map[string]int)
-
 		ep := sp.pm.Db.GetEndpoints(svc.Name)
-
-		for _, subset := range ep.Subsets {
-			for _, addr := range subset.Addresses {
-				ips = append(ips, addr.IP)
-			}
-		}
-
-		for _, port := range svc.Spec.Ports {
-			ports[port.Name] = port.Port
-		}
-
-		se := Service{
-			Name:        svc.Name,
-			Annotations: svc.Annotations,
-			Endpoints:   ips,
-			Ports:       ports,
-		}
-
-		exportedServices[se.Name] = se
+		exportedServices[svc.Name] = sp.createService(svc, *ep)
 	}
 
 	sp.updateKV(exportedServices)
 	sp.updateDNS(exportedServices)
 }
 
-func (sp *ServicePlugin) updateKV(services ServiceList) {
-	for _, kp := range sp.pm.Consul.ListKV(SERVICES_ROOT) {
-		s := strings.Split(kp.Key, "/")
-		serviceName := s[len(s)-1]
-		if _, ok := services[serviceName]; !ok {
-			fmt.Println("delete", kp.Key)
-			sp.pm.Consul.DeleteKV(kp.Key)
+func (sp *ServicePlugin) handleEvent(event watch.Event) {
+	const (
+		service = iota
+		endpoint
+	)
+
+	var (
+		event_type int
+		name       string
+	)
+
+	switch event.Object.(type) {
+	case *kapi.Service:
+		name = event.Object.(*kapi.Service).Name
+		event_type = service
+	case *kapi.Endpoints:
+		name = event.Object.(*kapi.Endpoints).Name
+		event_type = endpoint
+	default:
+		return
+	}
+
+	if event_type == endpoint && (event.Type == watch.Added || event.Type == watch.Modified) {
+		if svc, err := sp.getServiceKV(name); err != nil {
+			glog.Errorf("Cannot get service %s", name)
+			return
+		} else {
+			glog.Infof("Endpoint %s modified or added", name)
+
+			// Update svc with new endpoints
+			ep := event.Object.(*kapi.Endpoints)
+			svc.Endpoints = sp.getEnpointsIps(*ep)
+			sp.updateServiceKV(svc)
+			sp.updateServiceDNS(svc)
 		}
-	}
+	} else if event_type == service && event.Type == watch.Added {
+		// Add new service in KV. We don't add endpoints because we don't
+		// have any
+		glog.Infof("Service %s added", name)
 
-	for _, svc := range services {
-		obj, _ := json.Marshal(svc)
-		sp.pm.Consul.PutKV(fmt.Sprintf("%s/%s", SERVICES_ROOT, svc.Name), string(obj))
-	}
+		kubeService := event.Object.(*kapi.Service)
+		svc := sp.createService(*kubeService, kapi.Endpoints{})
+		sp.updateServiceKV(svc)
 
-	glog.Info("Consul KV resynced")
+	} else if event_type == service && event.Type == watch.Modified {
+		if svc, err := sp.getServiceKV(name); err != nil {
+			glog.Errorf("Cannot get service %s", name)
+			return
+		} else {
+			// Update service with old endpoint
+			glog.Infof("Service %s modified", name)
+
+			ep := svc.Endpoints
+
+			kubeService := event.Object.(*kapi.Service)
+			svc = sp.createService(*kubeService, kapi.Endpoints{})
+			svc.Endpoints = ep
+
+			sp.updateServiceKV(svc)
+			sp.updateServiceDNS(svc)
+		}
+	} else if event_type == service && event.Type == watch.Deleted {
+		glog.Infof("Service %s deleted", name)
+
+		kubeService := event.Object.(*kapi.Service)
+		sp.removeServiceKV(kubeService.Name)
+		sp.removeServiceDNS(kubeService.Name)
+
+	} else {
+		return
+	}
 }
 
-func generateServiceID(serviceName, portName, ipAddress string) string {
-	return fmt.Sprintf("svc-%s-%s-%s", serviceName, portName, ipAddress)
+func (sp *ServicePlugin) getEnpointsIps(ep kapi.Endpoints) (ips []string) {
+	ips = make([]string, 0)
+
+	for _, subset := range ep.Subsets {
+		for _, addr := range subset.Addresses {
+			ips = append(ips, addr.IP)
+		}
+	}
+
+	return ips
 }
 
-func (sp *ServicePlugin) updateDNS(services ServiceList) {
-	servicesListID := make(map[string]bool)
+func (sp *ServicePlugin) createService(svc kapi.Service, ep kapi.Endpoints) Service {
+	ports := make(map[string]int)
 
-	for _, svc := range services {
-		for _, ipAddress := range svc.Endpoints {
-			for portName, portNumber := range svc.Ports {
-				id := generateServiceID(svc.Name, portName, ipAddress)
-				sp.pm.Consul.AddService(
-					id,
-					fmt.Sprintf("%s-%s", svc.Name, portName),
-					ipAddress,
-					portNumber,
-					[]string{SERVICES_TAG},
-				)
-				servicesListID[id] = true
-			}
-		}
+	ips := sp.getEnpointsIps(ep)
+
+	for _, port := range svc.Spec.Ports {
+		ports[port.Name] = port.Port
 	}
 
-	for k, v := range sp.pm.Consul.ListServices() {
-		if inSlice(SERVICES_TAG, v.Tags) {
-			if _, ok := servicesListID[k]; !ok {
-				sp.pm.Consul.RemoveService(k)
-				glog.Infof("Remove service '%s' in Consul", k)
-			}
-		}
+	se := Service{
+		Name:        svc.Name,
+		Annotations: svc.Annotations,
+		Endpoints:   ips,
+		Ports:       ports,
 	}
 
-	glog.Info("Consul services resynced")
-}
-
-func inSlice(value string, slice []string) bool {
-	for _, s := range slice {
-		if s == value {
-			return true
-		}
-	}
-	return false
+	return se
 }
