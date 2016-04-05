@@ -3,6 +3,8 @@ package main
 import (
 	"flag"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/golang/glog"
 	"k8s.io/kubernetes/pkg/client/restclient"
@@ -71,7 +73,16 @@ func main() {
 
 	go db.WatchEvents()
 
-	for range ch {
-		pm.Sync()
+	sigc := make(chan os.Signal, 1)
+	signal.Notify(sigc, syscall.SIGHUP)
+
+	for {
+		select {
+		case <-sigc:
+			glog.Info("User trigger an update")
+			pm.Sync()
+		case <-ch:
+			pm.Sync()
+		}
 	}
 }
