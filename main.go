@@ -7,8 +7,6 @@ import (
 	"syscall"
 
 	"github.com/golang/glog"
-	"k8s.io/kubernetes/pkg/client/restclient"
-	kclient "k8s.io/kubernetes/pkg/client/unversioned"
 
 	"github.com/lightcode/kube2consul/api"
 	"github.com/lightcode/kube2consul/plugins"
@@ -17,43 +15,25 @@ import (
 	_ "github.com/lightcode/kube2consul/plugins/services"
 )
 
-var (
-	kubeAPIServerURL string
-)
+var opts CmdLineOpts
+
+type CmdLineOpts struct {
+	kubeAPI   string
+	consulAPI string
+}
 
 func init() {
-	flag.StringVar(&kubeAPIServerURL, "kubernetes-api", "", "Kubernetes API URL")
-}
-
-func getKubeClient() *kclient.Client {
-	config := &restclient.Config{
-		Host: kubeAPIServerURL,
-	}
-
-	if kubeClient, err := kclient.New(config); err == nil {
-		return kubeClient
-	} else {
-		glog.Fatalln("Can't connect to Kubernetes API:", err)
-	}
-	return nil
-}
-
-func handleArgs() {
-	flag.Parse()
-
-	if kubeAPIServerURL == "" {
-		flag.Usage()
-		os.Exit(1)
-	}
+	flag.StringVar(&opts.kubeAPI, "kubernetes-api", "http://127.0.0.1:8080", "Kubernetes API URL")
+	flag.StringVar(&opts.consulAPI, "consul-api", "127.0.0.1:8500", "Consul API URL")
 }
 
 func main() {
-	handleArgs()
+	flag.Parse()
 
-	consulClient := api.NewConsulClient()
-	kubeWatcher := api.NewKubeWatcher(getKubeClient())
+	consulClient := api.NewConsulClient(opts.consulAPI)
+	kubeWatcher := api.NewKubeWatcher(opts.kubeAPI)
 
-	db := api.NewDatabase(getKubeClient())
+	db := api.NewDatabase(opts.kubeAPI)
 	pm := plugins.NewPluginManager(db, consulClient, kubeWatcher)
 
 	pm.Initialize()

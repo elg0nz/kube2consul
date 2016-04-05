@@ -2,7 +2,6 @@ package api
 
 import (
 	"github.com/golang/glog"
-
 	kapi "k8s.io/kubernetes/pkg/api"
 	kclient "k8s.io/kubernetes/pkg/client/unversioned"
 	"k8s.io/kubernetes/pkg/watch"
@@ -18,9 +17,9 @@ type Subscriber struct {
 	ch chan watch.Event
 }
 
-func NewKubeWatcher(cl *kclient.Client) *KubeWatcher {
+func NewKubeWatcher(kubeURL string) *KubeWatcher {
 	return &KubeWatcher{
-		kubeClient: cl,
+		kubeClient: getKubeClient(kubeURL),
 	}
 }
 

@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/golang/glog"
-
 	kapi "k8s.io/kubernetes/pkg/api"
 	kclient "k8s.io/kubernetes/pkg/client/unversioned"
 )
@@ -21,9 +20,9 @@ type Database struct {
 	sync.Mutex
 }
 
-func NewDatabase(cl *kclient.Client) *Database {
+func NewDatabase(kubeURL string) *Database {
 	return &Database{
-		kubeClient: cl,
+		kubeClient: getKubeClient(kubeURL),
 	}
 }
 

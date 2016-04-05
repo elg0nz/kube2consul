@@ -1,27 +1,19 @@
 package api
 
 import (
-	"flag"
-
 	"github.com/golang/glog"
 	consul "github.com/hashicorp/consul/api"
 )
-
-var consulApiUrl string
-
-func init() {
-	flag.StringVar(&consulApiUrl, "consul-api", "127.0.0.1:8500", "Consul API URL")
-}
 
 type ConsulBackend struct {
 	client *consul.Client
 }
 
-func NewConsulClient() *ConsulBackend {
+func NewConsulClient(consulAPI string) *ConsulBackend {
 	cb := new(ConsulBackend)
 
 	consulConfig := &consul.Config{
-		Address: consulApiUrl,
+		Address: consulAPI,
 	}
 
 	if consulClient, err := consul.NewClient(consulConfig); err == nil {
