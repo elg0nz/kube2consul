@@ -2,8 +2,8 @@ package plugins
 
 import (
 	"github.com/golang/glog"
-	"github.com/lightcode/kube2consul/backend"
-	"github.com/lightcode/kube2consul/database"
+
+	"github.com/lightcode/kube2consul/api"
 )
 
 var plugins map[string]PluginEntry = make(map[string]PluginEntry)
@@ -21,16 +21,21 @@ type Plugin interface {
 
 func Register(name string, plugin Plugin) {
 	glog.Infof("Register plugin \"%s\"", name)
-	plugins[name] = PluginEntry{name: name, plugin: plugin, isInitialized: false}
+	plugins[name] = PluginEntry{
+		name:          name,
+		plugin:        plugin,
+		isInitialized: false,
+	}
 }
 
 type PluginManager struct {
-	Db     *database.Database
-	Consul *backend.ConsulBackend
+	Db          *api.Database
+	Consul      *api.ConsulBackend
+	KubeWatcher *api.KubeWatcher
 }
 
-func NewPluginManager(db *database.Database, cb *backend.ConsulBackend) *PluginManager {
-	return &PluginManager{Db: db, Consul: cb}
+func NewPluginManager(db *api.Database, cb *api.ConsulBackend, kw *api.KubeWatcher) *PluginManager {
+	return &PluginManager{Db: db, Consul: cb, KubeWatcher: kw}
 }
 
 func (pm *PluginManager) Sync() {

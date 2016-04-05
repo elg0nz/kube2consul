@@ -10,8 +10,7 @@ import (
 	"k8s.io/kubernetes/pkg/client/restclient"
 	kclient "k8s.io/kubernetes/pkg/client/unversioned"
 
-	"github.com/lightcode/kube2consul/backend"
-	"github.com/lightcode/kube2consul/database"
+	"github.com/lightcode/kube2consul/api"
 	"github.com/lightcode/kube2consul/plugins"
 
 	// Plugins need to be imported for their init() to get executed and them to register
@@ -26,7 +25,11 @@ func init() {
 	flag.StringVar(&kubeAPIServerURL, "kubernetes-api", "", "Kubernetes API URL")
 }
 
-func getKubeClient(config *restclient.Config) *kclient.Client {
+func getKubeClient() *kclient.Client {
+	config := &restclient.Config{
+		Host: kubeAPIServerURL,
+	}
+
 	if kubeClient, err := kclient.New(config); err == nil {
 		return kubeClient
 	} else {
@@ -35,34 +38,23 @@ func getKubeClient(config *restclient.Config) *kclient.Client {
 	return nil
 }
 
-// USELESS ?
-func getKubeExtClient(config *restclient.Config) *kclient.ExtensionsClient {
-	if kubeExtClient, err := kclient.NewExtensions(config); err == nil {
-		return kubeExtClient
-	} else {
-		glog.Fatalln("Can't connect to Kubernetes API:", err)
-	}
-	return nil
-}
-
-func main() {
+func handleArgs() {
 	flag.Parse()
 
 	if kubeAPIServerURL == "" {
 		flag.Usage()
 		os.Exit(1)
 	}
+}
 
-	glog.Infof("Kubernetes API URL: %s", kubeAPIServerURL)
+func main() {
+	handleArgs()
 
-	config := &restclient.Config{
-		Host: kubeAPIServerURL,
-	}
+	consulClient := api.NewConsulClient()
+	kubeWatcher := api.NewKubeWatcher(getKubeClient())
 
-	cb := backend.NewConsulClient()
-
-	db := database.NewDatabase(getKubeClient(config))
-	pm := plugins.NewPluginManager(db, cb)
+	db := api.NewDatabase(getKubeClient())
+	pm := plugins.NewPluginManager(db, consulClient, kubeWatcher)
 
 	pm.Initialize()
 	db.UpdateDatabase()
@@ -71,7 +63,7 @@ func main() {
 	ch := make(chan struct{})
 	go db.StartWatching(ch)
 
-	go db.WatchEvents()
+	go kubeWatcher.Start()
 
 	sigc := make(chan os.Signal, 1)
 	signal.Notify(sigc, syscall.SIGHUP)

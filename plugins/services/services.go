@@ -1,12 +1,11 @@
 package service
 
 import (
+	"github.com/golang/glog"
+	kapi "k8s.io/kubernetes/pkg/api"
 	"k8s.io/kubernetes/pkg/watch"
 
-	"github.com/golang/glog"
 	"github.com/lightcode/kube2consul/plugins"
-
-	kapi "k8s.io/kubernetes/pkg/api"
 )
 
 const (
@@ -36,7 +35,7 @@ func (sp *ServicePlugin) Initialize(pm *plugins.PluginManager) {
 	sp.pm = pm
 
 	ch := make(chan watch.Event)
-	pm.Db.Subscribe(ch)
+	pm.KubeWatcher.Subscribe(ch)
 
 	go func() {
 		for event := range ch {
