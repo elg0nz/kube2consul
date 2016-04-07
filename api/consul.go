@@ -2,21 +2,20 @@ package api
 
 import (
 	"github.com/golang/glog"
-	consul "github.com/hashicorp/consul/api"
+	consulapi "github.com/hashicorp/consul/api"
 )
 
 type ConsulBackend struct {
-	client *consul.Client
+	client *consulapi.Client
 }
 
 func NewConsulClient(consulAPI string) *ConsulBackend {
 	cb := new(ConsulBackend)
 
-	consulConfig := &consul.Config{
-		Address: consulAPI,
-	}
+	config := consulapi.DefaultConfig()
+	config.Address = consulAPI
 
-	if consulClient, err := consul.NewClient(consulConfig); err == nil {
+	if consulClient, err := consulapi.NewClient(config); err == nil {
 		cb.client = consulClient
 	} else {
 		glog.Fatalln(err)
@@ -25,16 +24,20 @@ func NewConsulClient(consulAPI string) *ConsulBackend {
 	return cb
 }
 
+func (cb *ConsulBackend) Client() *consulapi.Client {
+	return cb.client
+}
+
 func (cb *ConsulBackend) PutKV(key, value string) {
 	kv := cb.client.KV()
-	p := &consul.KVPair{Key: key, Value: []byte(value)}
+	p := &consulapi.KVPair{Key: key, Value: []byte(value)}
 	_, err := kv.Put(p, nil)
 	if err != nil {
 		glog.Fatalln("Cannot add value in Consul:", err)
 	}
 }
 
-func (cb *ConsulBackend) GetKV(key string) (*consul.KVPair, error) {
+func (cb *ConsulBackend) GetKV(key string) (*consulapi.KVPair, error) {
 	kv := cb.client.KV()
 	value, _, err := kv.Get(key, nil)
 	return value, err
@@ -48,7 +51,7 @@ func (cb *ConsulBackend) DeleteKV(key string) {
 	}
 }
 
-func (cb *ConsulBackend) ListKV(key string) consul.KVPairs {
+func (cb *ConsulBackend) ListKV(key string) consulapi.KVPairs {
 	kv := cb.client.KV()
 	if values, _, err := kv.List(key, nil); err == nil {
 		return values
@@ -59,7 +62,7 @@ func (cb *ConsulBackend) ListKV(key string) consul.KVPairs {
 func (cb *ConsulBackend) AddService(id, name, address string, port int, tags []string) {
 	agent := cb.client.Agent()
 
-	service := &consul.AgentServiceRegistration{
+	service := &consulapi.AgentServiceRegistration{
 		ID:      id,
 		Name:    name,
 		Address: address,
@@ -80,7 +83,7 @@ func (cb *ConsulBackend) RemoveService(serviceID string) {
 	}
 }
 
-func (cb *ConsulBackend) ListServices() map[string]*consul.AgentService {
+func (cb *ConsulBackend) ListServices() map[string]*consulapi.AgentService {
 	agent := cb.client.Agent()
 
 	if services, err := agent.Services(); err == nil {
