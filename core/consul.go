@@ -59,6 +59,8 @@ func (cb *ConsulBackend) ListKV(key string) consulapi.KVPairs {
 	return nil
 }
 
+// TODO: Utiliser les CatalogRegistration à la place ?
+// https://godoc.org/github.com/hashicorp/consul/api#CatalogRegistration
 func (cb *ConsulBackend) AddService(id, name, address string, port int, tags []string) {
 	agent := cb.client.Agent()
 

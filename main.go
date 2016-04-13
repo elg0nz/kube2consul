@@ -9,7 +9,7 @@ import (
 	"github.com/golang/glog"
 	consulapi "github.com/hashicorp/consul/api"
 
-	"github.com/lightcode/kube2consul/api"
+	"github.com/lightcode/kube2consul/core"
 	"github.com/lightcode/kube2consul/plugins"
 
 	// Plugins need to be imported for their init() to get executed and them to register

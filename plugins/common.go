@@ -3,7 +3,7 @@ package plugins
 import (
 	"github.com/golang/glog"
 
-	"github.com/lightcode/kube2consul/api"
+	"github.com/lightcode/kube2consul/core"
 )
 
 var plugins map[string]PluginEntry = make(map[string]PluginEntry)
