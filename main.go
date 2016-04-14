@@ -6,6 +6,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/coreos/pkg/flagutil"
 	"github.com/golang/glog"
 	consulapi "github.com/hashicorp/consul/api"
 
@@ -81,6 +82,8 @@ func releaseLock() {
 
 func main() {
 	flag.Parse()
+
+	flagutil.SetFlagsFromEnv(flag.CommandLine, "K2C")
 
 	consulClient = api.NewConsulClient(opts.consulAPI)
 
